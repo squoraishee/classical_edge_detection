@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Feature Detector Simulation</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .container {
+            max-width: 1500px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        canvas {
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            background-color: #f9fafb;
+        }
+        .btn {
+            display: inline-block;
+            padding: 0.5rem 1rem;
+            margin-top: 0.5rem;
+            border-radius: 0.5rem;
+            background-color: #4f46e5;
+            color: white;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .btn:hover {
+            background-color: #4338ca;
+        }
+        .btn-group {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 1rem;
+        }
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #4f46e5;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 2rem auto;
+            display: none; /* Hidden by default */
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+
+    <div class="container">
+        <header class="text-center mb-8">
+            <h1 class="text-4xl font-bold text-gray-800">Feature Detector Simulation</h1>
+            <p class="text-lg text-gray-600 mt-2">Compare various edge, corner, and blob detection algorithms.</p>
+        </header>
+
+        <div class="bg-white p-8 rounded-lg shadow-lg">
+            <div class="mb-6 text-center">
+                <input type="file" id="imageLoader" class="hidden" accept="image/*"/>
+                <label for="imageLoader" class="btn">Upload Image</label>
+                <div class="btn-group mt-4">
+                    <button id="applySobel" class="btn">Apply Sobel</button>
+                    <button id="applyCanny" class="btn">Apply Canny</button>
+                    <button id="applyHarris" class="btn">Apply Harris</button>
+                    <button id="applyShiTomasi" class="btn">Apply Shi-Tomasi</button>
+                    <button id="applyLoG" class="btn">Apply LoG</button>
+                </div>
+            </div>
+            
+            <div id="loader" class="loader"></div>
+
+            <div class="grid md:grid-cols-3 gap-8">
+                <div class="text-center">
+                    <h2 class="text-2xl font-semibold text-gray-700 mb-4">Original Image</h2>
+                    <canvas id="originalCanvas" class="w-full h-auto"></canvas>
+                </div>
+                <div class="text-center">
+                    <h2 class="text-2xl font-semibold text-gray-700 mb-4">Sobel Edges</h2>
+                    <canvas id="sobelCanvas" class="w-full h-auto"></canvas>
+                </div>
+                <div class="text-center">
+                    <h2 class="text-2xl font-semibold text-gray-700 mb-4">Canny Edges</h2>
+                    <canvas id="cannyCanvas" class="w-full h-auto"></canvas>
+                </div>
+                 <div class="text-center">
+                    <h2 class="text-2xl font-semibold text-gray-700 mb-4">Harris Corners</h2>
+                    <canvas id="harrisCanvas" class="w-full h-auto"></canvas>
+                </div>
+                <div class="text-center">
+                    <h2 class="text-2xl font-semibold text-gray-700 mb-4">Shi-Tomasi Corners</h2>
+                    <canvas id="shiTomasiCanvas" class="w-full h-auto"></canvas>
+                </div>
+                <div class="text-center">
+                    <h2 class="text-2xl font-semibold text-gray-700 mb-4">LoG Blobs</h2>
+                    <canvas id="logCanvas" class="w-full h-auto"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const imageLoader = document.getElementById('imageLoader');
+        const originalCanvas = document.getElementById('originalCanvas');
+        const sobelCanvas = document.getElementById('sobelCanvas');
+        const cannyCanvas = document.getElementById('cannyCanvas');
+        const harrisCanvas = document.getElementById('harrisCanvas');
+        const shiTomasiCanvas = document.getElementById('shiTomasiCanvas');
+        const logCanvas = document.getElementById('logCanvas');
+        
+        const applySobelBtn = document.getElementById('applySobel');
+        const applyCannyBtn = document.getElementById('applyCanny');
+        const applyHarrisBtn = document.getElementById('applyHarris');
+        const applyShiTomasiBtn = document.getElementById('applyShiTomasi');
+        const applyLoGBtn = document.getElementById('applyLoG');
+        
+        const loader = document.getElementById('loader');
+
+        const canvases = {
+            original: originalCanvas.getContext('2d', { willReadFrequently: true }),
+            sobel: sobelCanvas.getContext('2d'),
+            canny: cannyCanvas.getContext('2d'),
+            harris: harrisCanvas.getContext('2d'),
+            shiTomasi: shiTomasiCanvas.getContext('2d'),
+            log: logCanvas.getContext('2d'),
+        };
+        
+        let originalImage = null;
+
+        window.onload = () => {
+            const defaultImage = new Image();
+            defaultImage.src = 'https://placehold.co/600x400/CCCCCC/4f46e5?text=Upload+An+Image';
+            defaultImage.crossOrigin = "Anonymous";
+            defaultImage.onload = () => {
+                drawImageOnCanvas(defaultImage);
+                originalImage = defaultImage;
+            };
+        };
+
+        imageLoader.addEventListener('change', (e) => {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const img = new Image();
+                img.onload = () => {
+                    drawImageOnCanvas(img);
+                    originalImage = img;
+                };
+                img.src = event.target.result;
+            }
+            if (e.target.files[0]) reader.readAsDataURL(e.target.files[0]);
+        });
+        
+        const runFilter = (filterFn) => {
+            if (originalImage) {
+                loader.style.display = 'block';
+                setTimeout(() => {
+                    filterFn();
+                    loader.style.display = 'none';
+                }, 50);
+            } else {
+                alert("Please upload an image first.");
+            }
+        };
+
+        applySobelBtn.addEventListener('click', () => runFilter(applySobelFilter));
+        applyCannyBtn.addEventListener('click', () => runFilter(applyCannyFilter));
+        applyHarrisBtn.addEventListener('click', () => runFilter(applyHarrisFilter));
+        applyShiTomasiBtn.addEventListener('click', () => runFilter(applyShiTomasiFilter));
+        applyLoGBtn.addEventListener('click', () => runFilter(applyLoGFilter));
+
+        function drawImageOnCanvas(img) {
+            const aspectRatio = img.width / img.height;
+            const maxWidth = 500;
+            let canvasWidth = img.width > maxWidth ? maxWidth : img.width;
+            let canvasHeight = canvasWidth / aspectRatio;
+
+            for (const key in canvases) {
+                canvases[key].canvas.width = canvasWidth;
+                canvases[key].canvas.height = canvasHeight;
+                if (key !== 'original') {
+                     canvases[key].clearRect(0, 0, canvasWidth, canvasHeight);
+                }
+            }
+            canvases.original.drawImage(img, 0, 0, canvasWidth, canvasHeight);
+        }
+        
+        function getCommonImageData() {
+            const width = originalCanvas.width;
+            const height = originalCanvas.height;
+            const imageData = canvases.original.getImageData(0, 0, width, height);
+            const grayData = toGrayscale(imageData);
+            return { width, height, imageData, grayData };
+        }
+
+        // --- Utility Functions ---
+        function toGrayscale(imageData) {
+            const data = imageData.data;
+            const grayData = new Uint8ClampedArray(imageData.width * imageData.height);
+            for (let i = 0; i < data.length; i += 4) {
+                const r = data[i], g = data[i + 1], b = data[i + 2];
+                grayData[i / 4] = 0.299 * r + 0.587 * g + 0.114 * b;
+            }
+            return grayData;
+        }
+        
+        function sobel(data, width, height) {
+            const magnitudes = new Float32Array(data.length);
+            const directions = new Float32Array(data.length);
+            const Gx = new Float32Array(data.length);
+            const Gy = new Float32Array(data.length);
+            const sobelX = [[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]];
+            const sobelY = [[-1, -2, -1], [0, 0, 0], [1, 2, 1]];
+
+            for (let y = 1; y < height - 1; y++) {
+                for (let x = 1; x < width - 1; x++) {
+                    let gx_val = 0, gy_val = 0;
+                    for (let ky = -1; ky <= 1; ky++) {
+                        for (let kx = -1; kx <= 1; kx++) {
+                            const val = data[(y + ky) * width + (x + kx)];
+                            gx_val += val * sobelX[ky + 1][kx + 1];
+                            gy_val += val * sobelY[ky + 1][kx + 1];
+                        }
+                    }
+                    const index = y * width + x;
+                    Gx[index] = gx_val;
+                    Gy[index] = gy_val;
+                    magnitudes[index] = Math.sqrt(gx_val * gx_val + gy_val * gy_val);
+                    directions[index] = Math.atan2(gy_val, gx_val);
+                }
+            }
+            return { magnitudes, directions, Gx, Gy };
+        }
+
+        // --- Sobel ---
+        function applySobelFilter() {
+            const { width, height, grayData } = getCommonImageData();
+            const { magnitudes } = sobel(grayData, width, height);
+            const sobelData = canvases.sobel.createImageData(width, height);
+            for (let i = 0; i < magnitudes.length; i++) {
+                const p = i * 4;
+                sobelData.data[p] = sobelData.data[p + 1] = sobelData.data[p + 2] = magnitudes[i];
+                sobelData.data[p + 3] = 255;
+            }
+            canvases.sobel.putImageData(sobelData, 0, 0);
+        }
+
+        // --- Canny ---
+        function applyCannyFilter() {
+            const { width, height, grayData } = getCommonImageData();
+            const blurredData = gaussianBlur(grayData, width, height, 1.4, 5);
+            const { magnitudes, directions } = sobel(blurredData, width, height);
+            const suppressedData = nonMaximumSuppression(magnitudes, directions, width, height);
+            const finalEdges = hysteresis(suppressedData, width, height, 50, 20);
+            const cannyImageData = canvases.canny.createImageData(width, height);
+            for (let i = 0; i < finalEdges.length; i++) {
+                const p = i * 4;
+                cannyImageData.data[p] = cannyImageData.data[p + 1] = cannyImageData.data[p + 2] = finalEdges[i];
+                cannyImageData.data[p + 3] = 255;
+            }
+            canvases.canny.putImageData(cannyImageData, 0, 0);
+        }
+        // Canny helper functions (blur, non-max suppression, hysteresis) are placed at the end for brevity.
+        
+        // --- Harris Corner ---
+        function applyHarrisFilter() {
+            const { width, height, grayData } = getCommonImageData();
+            const { Gx, Gy } = sobel(grayData, width, height);
+            
+            canvases.harris.drawImage(originalCanvas, 0, 0, width, height);
+            canvases.harris.fillStyle = 'red';
+            
+            const k = 0.05;
+            const windowSize = 5;
+            const halfSize = Math.floor(windowSize / 2);
+
+            for (let y = halfSize; y < height - halfSize; y++) {
+                for (let x = halfSize; x < width - halfSize; x++) {
+                    let Sxx = 0, Syy = 0, Sxy = 0;
+                    for (let wy = -halfSize; wy <= halfSize; wy++) {
+                        for (let wx = -halfSize; wx <= halfSize; wx++) {
+                            const index = (y + wy) * width + (x + wx);
+                            Sxx += Gx[index] * Gx[index];
+                            Syy += Gy[index] * Gy[index];
+                            Sxy += Gx[index] * Gy[index];
+                        }
+                    }
+                    const det = (Sxx * Syy) - (Sxy * Sxy);
+                    const trace = Sxx + Syy;
+                    const R = det - k * (trace * trace);
+
+                    if (R > 10000000) { // Empirical threshold
+                        canvases.harris.beginPath();
+                        canvases.harris.arc(x, y, 2, 0, 2 * Math.PI, false);
+                        canvases.harris.fill();
+                    }
+                }
+            }
+        }
+
+        // --- Shi-Tomasi Corner ---
+        function applyShiTomasiFilter() {
+            const { width, height, grayData } = getCommonImageData();
+            const { Gx, Gy } = sobel(grayData, width, height);
+
+            canvases.shiTomasi.drawImage(originalCanvas, 0, 0, width, height);
+            canvases.shiTomasi.fillStyle = 'lime';
+
+            const windowSize = 5;
+            const halfSize = Math.floor(windowSize / 2);
+
+            for (let y = halfSize; y < height - halfSize; y++) {
+                for (let x = halfSize; x < width - halfSize; x++) {
+                    let Sxx = 0, Syy = 0, Sxy = 0;
+                     for (let wy = -halfSize; wy <= halfSize; wy++) {
+                        for (let wx = -halfSize; wx <= halfSize; wx++) {
+                            const index = (y + wy) * width + (x + wx);
+                            Sxx += Gx[index] * Gx[index];
+                            Syy += Gy[index] * Gy[index];
+                            Sxy += Gx[index] * Gy[index];
+                        }
+                    }
+                    const trace = Sxx + Syy;
+                    const det = (Sxx * Syy) - (Sxy * Sxy);
+                    const discriminant = Math.sqrt(trace * trace - 4 * det);
+                    const lambda1 = (trace + discriminant) / 2;
+                    const lambda2 = (trace - discriminant) / 2;
+                    const minLambda = Math.min(lambda1, lambda2);
+
+                    if (minLambda > 50000) { // Empirical threshold
+                        canvases.shiTomasi.beginPath();
+                        canvases.shiTomasi.arc(x, y, 2, 0, 2 * Math.PI, false);
+                        canvases.shiTomasi.fill();
+                    }
+                }
+            }
+        }
+        
+        // --- Laplacian of Gaussian (LoG) ---
+        function applyLoGFilter() {
+            const { width, height, grayData } = getCommonImageData();
+            const blurredData = gaussianBlur(grayData, width, height, 1.4, 5);
+            
+            const laplacianKernel = [ [0, 1, 0], [1, -4, 1], [0, 1, 0] ];
+            const logData = canvases.log.createImageData(width, height);
+
+            for (let y = 1; y < height - 1; y++) {
+                for (let x = 1; x < width - 1; x++) {
+                    let sum = 0;
+                    for (let ky = -1; ky <= 1; ky++) {
+                        for (let kx = -1; kx <= 1; kx++) {
+                            sum += blurredData[(y + ky) * width + (x + kx)] * laplacianKernel[ky + 1][kx + 1];
+                        }
+                    }
+                    const index = (y * width + x) * 4;
+                    // Visualize the zero-crossings
+                    if(sum > 4) { // Positive response
+                        logData.data[index] = 255;
+                        logData.data[index+1] = 255;
+                        logData.data[index+2] = 255;
+                    } else if (sum < -4) { // Negative response
+                         logData.data[index] = 0;
+                         logData.data[index+1] = 120;
+                         logData.data[index+2] = 255;
+                    }
+                    logData.data[index + 3] = 255;
+                }
+            }
+            canvases.log.putImageData(logData, 0, 0);
+        }
+
+        // --- Canny Helper Functions ---
+        function gaussianBlur(data, width, height, sigma, size) {
+            const kernel = []; const kSize = size || 5; const kHalf = Math.floor(kSize / 2); let kSum = 0;
+            for (let y = 0; y < kSize; y++) {
+                kernel[y] = [];
+                for (let x = 0; x < kSize; x++) {
+                    const exponent = -((x - kHalf) ** 2 + (y - kHalf) ** 2) / (2 * sigma ** 2);
+                    const value = Math.exp(exponent) / (2 * Math.PI * sigma ** 2);
+                    kernel[y][x] = value; kSum += value;
+                }
+            }
+            for (let y = 0; y < kSize; y++) { for (let x = 0; x < kSize; x++) { kernel[y][x] /= kSum; } }
+            const output = new Uint8ClampedArray(data.length);
+            for (let y = kHalf; y < height - kHalf; y++) {
+                for (let x = kHalf; x < width - kHalf; x++) {
+                    let sum = 0;
+                    for (let ky = -kHalf; ky <= kHalf; ky++) { for (let kx = -kHalf; kx <= kHalf; kx++) { sum += data[(y + ky) * width + (x + kx)] * kernel[ky + kHalf][kx + kHalf]; } }
+                    output[y * width + x] = sum;
+                }
+            }
+            return output;
+        }
+        function nonMaximumSuppression(magnitudes, directions, width, height) {
+            const output = new Float32Array(magnitudes.length);
+            for (let y = 1; y < height - 1; y++) {
+                for (let x = 1; x < width - 1; x++) {
+                    const index = y * width + x; const angle = directions[index] * 180 / Math.PI; const mag = magnitudes[index]; let q = 255;
+                    if ((angle >= -22.5 && angle < 22.5) || (angle >= 157.5) || (angle < -157.5)) { if (mag < magnitudes[index + 1] || mag < magnitudes[index - 1]) q = 0; }
+                    else if ((angle >= 22.5 && angle < 67.5) || (angle >= -157.5 && angle < -112.5)) { if (mag < magnitudes[index - width + 1] || mag < magnitudes[index + width - 1]) q = 0; }
+                    else if ((angle >= 67.5 && angle < 112.5) || (angle >= -112.5 && angle < -67.5)) { if (mag < magnitudes[index - width] || mag < magnitudes[index + width]) q = 0; }
+                    else if ((angle >= 112.5 && angle < 157.5) || (angle >= -67.5 && angle < -22.5)) { if (mag < magnitudes[index - width - 1] || mag < magnitudes[index + width + 1]) q = 0; }
+                    output[index] = q === 0 ? 0 : mag;
+                }
+            }
+            return output;
+        }
+        function hysteresis(data, width, height, highThreshold, lowThreshold) {
+            const output = new Uint8ClampedArray(data.length); const strong = 255; const weak = 75;
+            for (let i = 0; i < data.length; i++) { if (data[i] > highThreshold) output[i] = strong; else if (data[i] > lowThreshold) output[i] = weak; }
+            for (let y = 1; y < height - 1; y++) {
+                for (let x = 1; x < width - 1; x++) {
+                    const index = y * width + x;
+                    if (output[index] === weak) {
+                        let isStrongNeighbor = false;
+                        for (let j = -1; j <= 1; j++) {
+                            for (let i = -1; i <= 1; i++) {
+                                if (i === 0 && j === 0) continue;
+                                if (output[(y + j) * width + (x + i)] === strong) { isStrongNeighbor = true; break; }
+                            }
+                            if(isStrongNeighbor) break;
+                        }
+                        output[index] = isStrongNeighbor ? strong : 0;
+                    }
+                }
+            }
+            return output;
+        }
+    </script>
+</body>
+</html>
